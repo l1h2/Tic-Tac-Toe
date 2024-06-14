@@ -1,6 +1,6 @@
 import pygame as pg
 
-from config import Players, States, Wins
+from utils import Players, States, Wins
 
 
 class Board:
@@ -16,17 +16,24 @@ class Board:
     - `SPLASH_IMG (str)`: The path to the splash image.
     - `X_IMG (str)`: The path to the X image.
     - `O_IMG (str)`: The path to the O image.
-    - `board (list[list[Players | None]])`: The game array.
+    - `board_2d (list[list[Players | None]])`: The game array.
+    - `flat_board (list[int])`: The flattened game array.
+    - `reverse_board (list[int])`: The reverse flattened game array.
     - `screen (pg.Surface)`: The game window.
     - `splash (pg.Surface)`: The splash image.
     - `X (pg.Surface)`: The X image.
     - `O (pg.Surface)`: The O image.
 
+    #### Properties:
+    - `winner (Players | States | None)`: The winner of the game or game state.
+
     #### Methods:
     - `setup() -> None`: Sets up the game window and assets.
-    - `draw_board() -> None`: Draws the game board.
     - `draw_status(state: States) -> None`: Draws the status message for the game.
     - `update(row: int, col: int, player: Players) -> bool`: Updates the game board with the player's move.
+    - `check_square(row: int, col: int) -> Players | None`: Checks if the square is empty.
+    - `play_move(row: int, col: int, player: Players) -> bool`: Plays a move on the board.
+    - `clear_move(row: int, col: int) -> bool`: Clears a move from the board.
     - `draw_winning_line(start: tuple[int, int], end: tuple[int, int], win_type: Wins) -> None`: Draws the winning line on the board when a player wins.
     - `reset() -> None`: Resets the game board.
     """
@@ -40,8 +47,25 @@ class Board:
     X_IMG = "assets/X_modified.png"
     O_IMG = "assets/O_modified.png"
 
-    def __init__(self) -> None:
-        self.board = [[None] * 3, [None] * 3, [None] * 3]
+    def __init__(self, flat_board: list[int] | None = None) -> None:
+        if flat_board is None:
+            self.board_2d = [[None] * 3, [None] * 3, [None] * 3]
+            self.flat_board = [0] * 9
+            self.reverse_board = [0] * 9
+        else:
+            self.board_2d = [
+                [self.__get_player(flat_board[i + j]) for j in range(3)]
+                for i in range(0, 9, 3)
+            ]
+            self.flat_board = flat_board
+            self.reverse_board = [-i for i in flat_board]
+
+    @property
+    def winner(self) -> Players | States | None:
+        """
+        Players | States | None: The winner of the game or game state.
+        """
+        return self.__check_win()
 
     def setup(self) -> None:
         """
@@ -49,37 +73,7 @@ class Board:
         """
         self.__initiate_window()
         self.__load_assets()
-
-    def draw_board(self) -> None:
-        """
-        Draws the game board.
-        """
-        line_color = (10, 10, 10)
-        line_width = 7
-
-        self.screen.blit(self.splash, (0, 0))
-        pg.display.update()
-        pg.time.wait(1000)
-
-        self.screen.fill((255, 255, 255))
-        # Draw vertical lines
-        for i in range(1, 3):
-            pg.draw.line(
-                self.screen,
-                line_color,
-                (self.WIDTH / 3 * i, 0),
-                (self.WIDTH / 3 * i, self.HEIGHT),
-                line_width,
-            )
-        # Draw horizontal lines
-        for i in range(1, 3):
-            pg.draw.line(
-                self.screen,
-                line_color,
-                (0, self.HEIGHT / 3 * i),
-                (self.WIDTH, self.HEIGHT / 3 * i),
-                line_width,
-            )
+        self.reset()
 
     def draw_status(self, state: States) -> None:
         """
@@ -109,11 +103,63 @@ class Board:
         Returns:
             bool: True if the move is valid, False otherwise.
         """
-        if self.board[row][col] is not None:
+        valid_move = self.play_move(row, col, player)
+        if valid_move:
+            self.__draw_move(row, col, player)
+        return valid_move
+
+    def check_square(self, row: int, col: int) -> Players | None:
+        """
+        Checks if the square is empty.
+
+        Args:
+            row (int): The row of the square.
+            col (int): The column of the square.
+
+        Returns:
+            Players | None: The player occupying the square or None.
+        """
+        return self.board_2d[row][col]
+
+    def play_move(self, row: int, col: int, player: Players) -> bool:
+        """
+        Plays a move on the board.
+
+        Args:
+            row (int): The row of the move.
+            col (int): The column of the move.
+            player (Players): The player making the move.
+
+        Returns:
+            bool: True if the move is valid, False otherwise.
+        """
+        if self.check_square(row, col) is not None:
             return False
 
-        self.board[row][col] = player
-        self.__draw_move(row, col, player)
+        self.board_2d[row][col] = player
+        self.flat_board[row * 3 + col] = player.value
+        self.reverse_board[row * 3 + col] = (
+            Players.X.value if player == Players.O else Players.O.value
+        )
+        return True
+
+    def clear_move(self, row: int, col: int) -> bool:
+        """
+        Clears a move from the board.
+
+        Args:
+            row (int): The row of the move.
+            col (int): The column of the move.
+
+        Returns:
+            bool: True the move was cleared, False otherwise.
+        """
+        if self.check_square(row, col) is None:
+            return False
+
+        self.board_2d[row][col] = None
+        self.flat_board[row * 3 + col] = 0
+        self.reverse_board[row * 3 + col] = 0
         return True
 
     def draw_winning_line(
@@ -159,8 +205,10 @@ class Board:
         """
         Resets the game board.
         """
-        self.board = [[None] * 3, [None] * 3, [None] * 3]
-        self.draw_board()
+        self.board_2d = [[None] * 3, [None] * 3, [None] * 3]
+        self.flat_board = [0] * 9
+        self.reverse_board = [0] * 9
+        self.__draw_board()
         self.draw_status(States.X_TURN)
 
     def __initiate_window(self) -> None:
@@ -184,6 +232,37 @@ class Board:
         self.X = pg.transform.scale(self.X, (80, 80))
         self.O = pg.transform.scale(self.O, (80, 80))
 
+    def __draw_board(self) -> None:
+        """
+        Draws the game board.
+        """
+        line_color = (10, 10, 10)
+        line_width = 7
+
+        self.screen.blit(self.splash, (0, 0))
+        pg.display.update()
+        pg.time.wait(1000)
+
+        self.screen.fill((255, 255, 255))
+        # Draw vertical lines
+        for i in range(1, 3):
+            pg.draw.line(
+                self.screen,
+                line_color,
+                (self.WIDTH / 3 * i, 0),
+                (self.WIDTH / 3 * i, self.HEIGHT),
+                line_width,
+            )
+        # Draw horizontal lines
+        for i in range(1, 3):
+            pg.draw.line(
+                self.screen,
+                line_color,
+                (0, self.HEIGHT / 3 * i),
+                (self.WIDTH, self.HEIGHT / 3 * i),
+                line_width,
+            )
+
     def __draw_move(self, row: int, col: int, player: Players) -> None:
         """
         Draws the player's move on the board.
@@ -199,3 +278,71 @@ class Board:
             self.screen.blit(self.X, (pos_x, pos_y))
         elif player == Players.O:
             self.screen.blit(self.O, (pos_x, pos_y))
+
+    def __check_win(self) -> Players | States | None:
+        """
+        Checks the board for a winner or a draw.
+
+        Returns:
+            Players | States | None: The winner, draw state, or None.
+        """
+        # Check rows
+        for i in range(0, 9, 3):
+            if (
+                self.flat_board[i] != 0
+                and self.flat_board[i]
+                == self.flat_board[i + 1]
+                == self.flat_board[i + 2]
+            ):
+                return self.__get_player(self.flat_board[i])
+
+        # Check columns
+        for i in range(3):
+            if (
+                self.flat_board[i] != 0
+                and self.flat_board[i]
+                == self.flat_board[i + 3]
+                == self.flat_board[i + 6]
+            ):
+                return self.__get_player(self.flat_board[i])
+
+        # Check diagonals
+        if (
+            self.flat_board[0] != 0
+            and self.flat_board[0] == self.flat_board[4] == self.flat_board[8]
+        ):
+            return self.__get_player(self.flat_board[0])
+        if (
+            self.flat_board[2] != 0
+            and self.flat_board[2] == self.flat_board[4] == self.flat_board[6]
+        ):
+            return self.__get_player(self.flat_board[2])
+
+        # Check for draw
+        if all(self.flat_board[i] != 0 for i in range(9)):
+            return States.DRAW
+
+        return None
+
+    def __get_player(self, num: int) -> Players:
+        """
+        Gets the player from the number representation.
+
+        Args:
+            num (int): The player number.
+
+        Returns:
+            Players: The player.
+        """
+        if num == Players.X.value:
+            return Players.X
+        elif num == Players.O.value:
+            return Players.O
+        else:
+            return None
+
+    def __str__(self) -> str:
+        board_2d_str = "2D Board:\n" + "\n".join(map(str, self.board_2d))
+        flat_board_str = f"Flat Board:\n{self.flat_board}"
+        reverse_board_str = f"Reverse Board:\n{self.reverse_board}"
+        return f"{board_2d_str}\n\n{flat_board_str}\n\n{reverse_board_str}"

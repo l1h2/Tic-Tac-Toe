@@ -1,6 +1,6 @@
 import pygame as pg
 
-from config import PlayerType, States, Wins
+from utils import PlayerType, States, Wins
 
 from .board import Board
 from .player import Player
@@ -14,7 +14,7 @@ class Game:
     - `FPS (int)`: The frames per second of the game.
     - `X (Player)`: The player object for X.
     - `O (Player)`: The player object for O.
-    - `board (Board)`: The game board.
+    - `board (Board)`: The game board object.
     - `current_player (Player)`: The current player.
     - `winner (States)`: The winner of the game.
     - `winning_line (tuple[tuple[int, int], tuple[int, int]])`: The winning line on the board.
@@ -60,18 +60,12 @@ class Game:
         pg.init()
         self.clock = pg.time.Clock()
         self.board.setup()
-        self.board.draw_board()
-        self.board.draw_status(self.current_player.turn)
 
     def __computer_turn(self) -> None:
         """
         Plays a move for the computer player.
         """
-        self.__play_move(*self.current_player.move(self.board.board))
-        if not self.winner:
-            self.__end_turn()
-        else:
-            self.__end_game()
+        self.__play_move(*self.current_player.move(self.board))
 
     def __handle_events(self) -> bool:
         """
@@ -84,14 +78,22 @@ class Game:
             if event.type == pg.QUIT:
                 self.running = False
             elif event.type == pg.MOUSEBUTTONUP:
-                x, y = event.pos
-                row = y // (self.board.HEIGHT // 3)
-                col = x // (self.board.WIDTH // 3)
-                self.__play_move(row, col)
-                if not self.winner:
-                    self.__end_turn()
-                else:
-                    self.__end_game()
+                self.__play_move(*self.__get_move(event.pos))
+
+    def __get_move(self, click_pos: tuple[float, float]) -> tuple[int, int]:
+        """
+        Returns the row and column of the move based on the click position.
+
+        Args:
+            click_pos (tuple[float, float]): The position of the click.
+
+        Returns:
+            tuple[int, int]: The row and column of the move.
+        """
+        x, y = click_pos
+        row = y // (self.board.HEIGHT // 3)
+        col = x // (self.board.WIDTH // 3)
+        return (row, col)
 
     def __play_move(self, row: int, col: int) -> None:
         """
@@ -108,6 +110,7 @@ class Game:
 
         self.turn += 1
         self.__check_win(row, col)
+        self.__end_turn()
 
     def __check_win(self, row: int, col: int) -> None:
         """
@@ -117,7 +120,7 @@ class Game:
             row (int): The row of the last move.
             col (int): The column of the last move.
         """
-        board = self.board.board
+        board = self.board.board_2d
         # Check row
         if all(board[row][i] == self.current_player.player for i in range(3)):
             self.winner = self.current_player.win
@@ -153,8 +156,11 @@ class Game:
         """
         Ends the current player's turn and switches to the next player.
         """
-        self.current_player = self.O if self.current_player == self.X else self.X
-        self.board.draw_status(self.current_player.turn)
+        if not self.winner:
+            self.current_player = self.O if self.current_player == self.X else self.X
+            self.board.draw_status(self.current_player.turn)
+        else:
+            self.__end_game()
 
     def __end_game(self) -> None:
         """

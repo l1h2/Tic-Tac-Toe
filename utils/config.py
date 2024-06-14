@@ -10,8 +10,8 @@ class States(enum.Enum):
 
 
 class Players(enum.Enum):
-    X = "X"
-    O = "O"
+    X = 1
+    O = -1
 
 
 class PlayerType(enum.Enum):

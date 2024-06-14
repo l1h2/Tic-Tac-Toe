@@ -12,6 +12,7 @@ The Tic Tac Toe AI project is designed as a starting point for testing different
 
 - Four difficulty levels: Easy, Medium, Hard and Impossible.
 - Minimax algorithm with Alpha-Beta pruning for decision making.
+- MLP classification model trained on all possible game states.
 - Built with Pygame.
 
 ## How to Play

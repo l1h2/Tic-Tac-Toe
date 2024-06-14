@@ -1,7 +1,9 @@
 import pygame as pg
 
-from config import GameBoard, Players, PlayerType, States
 from models import MODELS, Models
+from utils import Players, PlayerType, States
+
+from .board import Board
 
 
 class Player:
@@ -16,7 +18,7 @@ class Player:
     - `win (States)`: The state of the player's win.
 
     #### Methods:
-    - `move(board: GameBoard) -> tuple[int, int]`: Returns the move for a computer player.
+    - `move(board: Board) -> tuple[int, int]`: Returns the move for a computer player.
     """
 
     def __init__(self, player: Players, type: PlayerType, brain: Models | None = None):
@@ -30,16 +32,15 @@ class Player:
             self.turn = States.O_TURN
             self.win = States.O_WIN
 
-    def move(self, board: GameBoard) -> tuple[int, int]:
+    def move(self, board: Board) -> tuple[int, int]:
         """
         Returns the move for a computer player.
 
         Args:
-            board (GameBoard): The current game board.
+            board (Board): The current game board.
 
         Returns:
             tuple[int, int]: The move of the player.
         """
         pg.time.wait(500)
-        move = self.brain(board, self.player)
-        return move
+        return self.brain(board, self.player)

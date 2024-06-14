@@ -1,10 +1,15 @@
+from typing import TYPE_CHECKING
+
 import numpy as np
 
-from config import GameBoard, Players, States
+from utils import Players, States
+
+if TYPE_CHECKING:
+    from game import Board
 
 
 def minimax_algo(
-    board: GameBoard,
+    board: "Board",
     player: Players,
     opponent: Players,
     current_player: Players,
@@ -17,7 +22,7 @@ def minimax_algo(
     Returns the best score or the best move for the current player using the minimax algorithm.
 
     Args:
-        board (GameBoard): The current game board.
+        board (Board): The game board object.
         player (Players): The maximizing player.
         opponent (Players): The minimizing player.
         current_player (Players): The current player.
@@ -29,9 +34,8 @@ def minimax_algo(
     Returns:
         int | tuple[int, int]: The best score or the best move.
     """
-    winner = check_win(board)
-    if winner is not None:
-        return scores[winner] - depth
+    if board.winner is not None:
+        return scores[board.winner] - depth
 
     if current_player == player:
         best_score = -np.inf
@@ -40,12 +44,11 @@ def minimax_algo(
         best_score = np.inf
         next_player = player
 
-    for i in range(0, 3):
-        for j in range(0, 3):
-            if board[i][j] is not None:
+    for i in range(3):
+        for j in range(3):
+            if not board.play_move(i, j, current_player):
                 continue
 
-            board[i][j] = current_player
             score = minimax_algo(
                 board,
                 player,
@@ -56,7 +59,7 @@ def minimax_algo(
                 alpha,
                 beta,
             )
-            board[i][j] = None
+            board.clear_move(i, j)
 
             if depth > 0:
                 if current_player == player:
@@ -76,34 +79,3 @@ def minimax_algo(
             break
 
     return move if depth == 0 else best_score
-
-
-def check_win(board: GameBoard) -> Players | States | None:
-    """
-    Checks if there is a winner or a draw.
-
-    Args:
-        board (GameBoard): The current game board.
-
-    Returns:
-        Players | States | None: The winner or None if there is no winner.
-    """
-    for i in range(3):
-        # Check rows
-        if board[i][0] is not None and board[i][0] == board[i][1] == board[i][2]:
-            return board[i][0]
-        # Check columns
-        if board[0][i] is not None and board[0][i] == board[1][i] == board[2][i]:
-            return board[0][i]
-
-    # Check diagonals
-    if board[0][0] is not None and board[0][0] == board[1][1] == board[2][2]:
-        return board[0][0]
-    if board[0][2] is not None and board[0][2] == board[1][1] == board[2][0]:
-        return board[0][2]
-
-    # Check for draw
-    if all(board[i][j] is not None for i in range(3) for j in range(3)):
-        return States.DRAW
-
-    return None
