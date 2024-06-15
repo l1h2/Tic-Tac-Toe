@@ -1,5 +1,6 @@
 import pygame as pg
 
+from models import MODELS, NEURAL_NETWORKS, Models, NeuralNetworks
 from utils import Players, States, Wins
 
 
@@ -16,9 +17,10 @@ class Board:
     - `SPLASH_IMG (str)`: The path to the splash image.
     - `X_IMG (str)`: The path to the X image.
     - `O_IMG (str)`: The path to the O image.
+    - `hints (Hints | None)`: The move hints object.
     - `board_2d (list[list[Players | None]])`: The game array.
     - `flat_board (list[int])`: The flattened game array.
-    - `reverse_board (list[int])`: The reverse flattened game array.
+    - `bit_board (BitBoard)`: The bit board representation.
     - `screen (pg.Surface)`: The game window.
     - `splash (pg.Surface)`: The splash image.
     - `X (pg.Surface)`: The X image.
@@ -47,25 +49,27 @@ class Board:
     X_IMG = "assets/X_modified.png"
     O_IMG = "assets/O_modified.png"
 
-    def __init__(self, flat_board: list[int] | None = None) -> None:
+    def __init__(self, hints: bool = False, flat_board: list[int] | None = None):
+        self.hints = Hints(self.WIDTH, self.HEIGHT) if hints else None
+        self.__game_surface = pg.Surface((self.WIDTH, self.HEIGHT)) if hints else None
         if flat_board is None:
             self.board_2d = [[None] * 3, [None] * 3, [None] * 3]
             self.flat_board = [0] * 9
-            self.reverse_board = [0] * 9
+            self.bit_board = BitBoard()
         else:
             self.board_2d = [
                 [self.__get_player(flat_board[i + j]) for j in range(3)]
                 for i in range(0, 9, 3)
             ]
             self.flat_board = flat_board
-            self.reverse_board = [-i for i in flat_board]
+            self.bit_board = BitBoard(flat_board)
 
     @property
     def winner(self) -> Players | States | None:
         """
         Players | States | None: The winner of the game or game state.
         """
-        return self.__check_win()
+        return self.bit_board.check_win()
 
     def setup(self) -> None:
         """
@@ -103,10 +107,19 @@ class Board:
         Returns:
             bool: True if the move is valid, False otherwise.
         """
-        valid_move = self.play_move(row, col, player)
-        if valid_move:
+        if not self.play_move(row, col, player):
+            return False
+
+        if not self.hints:
             self.__draw_move(row, col, player)
-        return valid_move
+            return True
+
+        self.__draw_move(row, col, player, self.__game_surface)
+        self.screen.blit(self.__game_surface, (0, 0))
+        if self.winner is None:
+            next_player = Players.X if player == Players.O else Players.O
+            self.__draw_hints(next_player)
+        return True
 
     def check_square(self, row: int, col: int) -> Players | None:
         """
@@ -138,9 +151,7 @@ class Board:
 
         self.board_2d[row][col] = player
         self.flat_board[row * 3 + col] = player.value
-        self.reverse_board[row * 3 + col] = (
-            Players.X.value if player == Players.O else Players.O.value
-        )
+        self.bit_board.move(row, col, player)
         return True
 
     def clear_move(self, row: int, col: int) -> bool:
@@ -159,7 +170,7 @@ class Board:
 
         self.board_2d[row][col] = None
         self.flat_board[row * 3 + col] = 0
-        self.reverse_board[row * 3 + col] = 0
+        self.bit_board.clear_move(row, col)
         return True
 
     def draw_winning_line(
@@ -207,8 +218,12 @@ class Board:
         """
         self.board_2d = [[None] * 3, [None] * 3, [None] * 3]
         self.flat_board = [0] * 9
-        self.reverse_board = [0] * 9
+        self.bit_board.clear()
+        self.__draw_splash()
         self.__draw_board()
+        if self.hints:
+            self.__draw_board(self.__game_surface)
+            self.__draw_hints(Players.X)
         self.draw_status(States.X_TURN)
 
     def __initiate_window(self) -> None:
@@ -232,38 +247,51 @@ class Board:
         self.X = pg.transform.scale(self.X, (80, 80))
         self.O = pg.transform.scale(self.O, (80, 80))
 
-    def __draw_board(self) -> None:
+    def __draw_splash(self) -> None:
+        """
+        Draws the splash screen.
+        """
+        self.screen.blit(self.splash, (0, 0))
+        pg.display.update()
+
+    def __draw_board(self, target_screen: pg.Surface | None = None) -> None:
         """
         Draws the game board.
+
+        Args:
+            target_screen (pg.Surface): The target screen to draw on. If None, the main screen is used.
         """
+        target_screen = target_screen if target_screen else self.screen
         line_color = (10, 10, 10)
         line_width = 7
 
-        self.screen.blit(self.splash, (0, 0))
-        pg.display.update()
-        pg.time.wait(1000)
-
-        self.screen.fill((255, 255, 255))
-        # Draw vertical lines
+        target_screen.fill((255, 255, 255))
         for i in range(1, 3):
+            # Draw vertical lines
             pg.draw.line(
-                self.screen,
+                target_screen,
                 line_color,
                 (self.WIDTH / 3 * i, 0),
                 (self.WIDTH / 3 * i, self.HEIGHT),
                 line_width,
             )
-        # Draw horizontal lines
-        for i in range(1, 3):
+
+            # Draw horizontal lines
             pg.draw.line(
-                self.screen,
+                target_screen,
                 line_color,
                 (0, self.HEIGHT / 3 * i),
                 (self.WIDTH, self.HEIGHT / 3 * i),
                 line_width,
             )
 
-    def __draw_move(self, row: int, col: int, player: Players) -> None:
+    def __draw_move(
+        self,
+        row: int,
+        col: int,
+        player: Players,
+        target_screen: pg.Surface | None = None,
+    ) -> None:
         """
         Draws the player's move on the board.
 
@@ -271,58 +299,27 @@ class Board:
             row (int): The row of the move.
             col (int): The column of the move.
             player (Players): The player making the move.
+            target_screen (pg.Surface): The target screen to draw on. If None, the main screen is used.
         """
+        target_screen = target_screen if target_screen else self.screen
         pos_x = col * self.WIDTH / 3 + self.OFFSET
         pos_y = row * self.HEIGHT / 3 + self.OFFSET
         if player == Players.X:
-            self.screen.blit(self.X, (pos_x, pos_y))
+            target_screen.blit(self.X, (pos_x, pos_y))
         elif player == Players.O:
-            self.screen.blit(self.O, (pos_x, pos_y))
+            target_screen.blit(self.O, (pos_x, pos_y))
 
-    def __check_win(self) -> Players | States | None:
+    def __draw_hints(self, player: Players) -> None:
         """
-        Checks the board for a winner or a draw.
+        Draws move hints on the board.
 
-        Returns:
-            Players | States | None: The winner, draw state, or None.
+        Args:
+            player (Players): The current player.
         """
-        # Check rows
-        for i in range(0, 9, 3):
-            if (
-                self.flat_board[i] != 0
-                and self.flat_board[i]
-                == self.flat_board[i + 1]
-                == self.flat_board[i + 2]
-            ):
-                return self.__get_player(self.flat_board[i])
-
-        # Check columns
-        for i in range(3):
-            if (
-                self.flat_board[i] != 0
-                and self.flat_board[i]
-                == self.flat_board[i + 3]
-                == self.flat_board[i + 6]
-            ):
-                return self.__get_player(self.flat_board[i])
-
-        # Check diagonals
-        if (
-            self.flat_board[0] != 0
-            and self.flat_board[0] == self.flat_board[4] == self.flat_board[8]
-        ):
-            return self.__get_player(self.flat_board[0])
-        if (
-            self.flat_board[2] != 0
-            and self.flat_board[2] == self.flat_board[4] == self.flat_board[6]
-        ):
-            return self.__get_player(self.flat_board[2])
-
-        # Check for draw
-        if all(self.flat_board[i] != 0 for i in range(9)):
-            return States.DRAW
-
-        return None
+        best_move = MODELS[Models.IMPOSSIBLE](self, player)
+        move_probabilities = NEURAL_NETWORKS[NeuralNetworks.MLP](self, True)
+        self.hints.draw_hints(best_move, move_probabilities)
+        self.screen.blit(self.hints.surface, (0, 0))
 
     def __get_player(self, num: int) -> Players:
         """
@@ -344,5 +341,183 @@ class Board:
     def __str__(self) -> str:
         board_2d_str = "2D Board:\n" + "\n".join(map(str, self.board_2d))
         flat_board_str = f"Flat Board:\n{self.flat_board}"
-        reverse_board_str = f"Reverse Board:\n{self.reverse_board}"
-        return f"{board_2d_str}\n\n{flat_board_str}\n\n{reverse_board_str}"
+        return f"{board_2d_str}\n\n{flat_board_str}"
+
+
+class BitBoard:
+    """
+    ### Represents the game state using bit boards.
+
+    #### Attributes:
+    - `X_bit_board (int)`: The bit board for player X.
+    - `O_bit_board (int)`: The bit board for player O.
+    - `WINNING_STATES (tuple[int])`: The winning states for the game.
+
+    #### Methods:
+    - `check_move(row: int, col: int) -> bool`: Checks if a move is valid.
+    - `move(row: int, col: int, player: Players) -> None`: Sets a move on the bit boards.
+    - `clear_move(row: int, col: int) -> None`: Clears a move from the bit boards.
+    - `clear() -> None`: Clears the bit boards.
+    - `check_win() -> Players | States | None`: Checks if a player has won the game.
+    """
+
+    WINNING_STATES = (
+        [0b111 << (i * 3) for i in range(3)]  # Rows
+        + [0b001001001 << i for i in range(3)]  # Columns
+        + [0b100010001, 0b001010100]  # Diagonals
+    )
+
+    def __init__(self, flat_board: list[int] | None = None):
+        self.X_bit_board = 0
+        self.O_bit_board = 0
+        if flat_board:
+            self.__get_board_from_list(flat_board)
+
+    def check_move(self, row: int, col: int) -> bool:
+        """
+        Checks if a move is valid.
+
+        Args:
+            row (int): The row of the move.
+            col (int): The column of the move.
+
+        Returns:
+            bool: True if the move is valid, False otherwise.
+        """
+        shift = row * 3 + col
+        return not ((self.X_bit_board | self.O_bit_board) & (1 << shift))
+
+    def move(self, row: int, col: int, player: Players) -> None:
+        """
+        Sets a move on the bit boards.
+
+        Args:
+            row (int): The row of the move.
+            col (int): The column of the move.
+            player (Players): The player making the move.
+        """
+        shift = row * 3 + col
+        if player == Players.X:
+            self.X_bit_board |= 1 << shift
+        else:
+            self.O_bit_board |= 1 << shift
+
+    def clear_move(self, row: int, col: int) -> None:
+        """
+        Clears a move from the bit boards.
+
+        Args:
+            row (int): The row of the move.
+            col (int): The column of the move.
+        """
+        shift = row * 3 + col
+        self.X_bit_board &= ~(1 << shift)
+        self.O_bit_board &= ~(1 << shift)
+
+    def clear(self) -> None:
+        """
+        Clears the bit boards.
+        """
+        self.X_bit_board = 0
+        self.O_bit_board = 0
+
+    def check_win(self) -> Players | States | None:
+        """
+        Checks if a player has won the game.
+
+        Returns:
+            Players | States | None: The winning player or state.
+        """
+        for condition in self.WINNING_STATES:
+            if self.X_bit_board & condition == condition:
+                return Players.X
+            if self.O_bit_board & condition == condition:
+                return Players.O
+
+        if self.X_bit_board | self.O_bit_board == 0b111111111:
+            return States.DRAW
+
+        return None
+
+    def __get_board_from_list(self, flat_board: list[int]) -> None:
+        """
+        Sets the bit boards from a list representation.
+
+        Args:
+            flat_board (list[int]): The flat board representation.
+        """
+        for i, player in enumerate(flat_board):
+            if player == 1:
+                self.X_bit_board |= 1 << i
+            elif player == -1:
+                self.O_bit_board |= 1 << i
+
+
+class Hints:
+    def __init__(self, width: int, height: int):
+        self.width = width
+        self.height = height
+        self.surface = pg.Surface((width, height), pg.SRCALPHA)
+        self.__clear_hints()
+
+    def draw_hints(
+        self, best_move: tuple[int, int], move_probabilities: list[float]
+    ) -> None:
+        """
+        Draws move hints on the board.
+
+        Args:
+            best_move (tuple[int, int]): The best move for the current player.
+            move_probabilities (list[float]): The probabilities for each move.
+        """
+        self.__clear_hints()
+        self.__draw_best_move_hint(best_move)
+        self.__draw_move_probabilities(move_probabilities)
+
+    def __clear_hints(self) -> None:
+        """
+        Clears all hints from the board.
+        """
+        self.surface.fill((0, 0, 0, 0))
+
+    def __draw_best_move_hint(self, best_move: tuple[int, int]) -> None:
+        """
+        Draws the best move hint on the board.
+
+        Args:
+            best_move (tuple[int, int]): The best move for the current player.
+        """
+        pos_x = best_move[1] * self.width / 3
+        pos_y = best_move[0] * self.height / 3
+
+        shape = (pos_x, pos_y, self.width / 3, self.height / 3)
+        color = (0, 255, 0)
+        line_width = 4
+
+        pg.draw.rect(
+            self.surface,
+            color,
+            shape,
+            line_width,
+        )
+
+    def __draw_move_probabilities(self, move_probabilities: list[float]) -> None:
+        """
+        Draws the move probabilities on the board.
+
+        Args:
+            move_probabilities (list[float]): The probabilities for each move.
+        """
+        font = pg.font.Font(None, 14)
+        x_offset = self.width / 3 - 30
+        y_offset = 10
+
+        for i in range(3):
+            for j in range(3):
+                prob = move_probabilities[i * 3 + j] * 100
+                text = font.render(f"{prob:.0f}%", True, (0, 0, 0))
+
+                pos_x = j * self.width / 3 + x_offset
+                pos_y = i * self.height / 3 + y_offset
+
+                self.surface.blit(text, (pos_x, pos_y))

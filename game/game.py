@@ -28,8 +28,8 @@ class Game:
 
     FPS = 30
 
-    def __init__(self, X: Player, O: Player):
-        self.board = Board()
+    def __init__(self, X: Player, O: Player, ai_hints: bool = False):
+        self.board = Board(ai_hints)
         self.X = X
         self.O = O
         self.current_player = X

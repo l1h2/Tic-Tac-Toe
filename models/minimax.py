@@ -34,8 +34,10 @@ def minimax_algo(
     Returns:
         int | tuple[int, int]: The best score or the best move.
     """
-    if board.winner is not None:
-        return scores[board.winner] - depth
+    winner = board.bit_board.check_win()
+    if winner is not None:
+        depth_weight = depth if player == winner else -depth
+        return scores[winner] - depth_weight
 
     if current_player == player:
         best_score = -np.inf
@@ -46,9 +48,18 @@ def minimax_algo(
 
     for i in range(3):
         for j in range(3):
-            if not board.play_move(i, j, current_player):
+            if not board.bit_board.check_move(i, j):
                 continue
 
+            # Prioritize blocking moves when loss is imminent
+            blocking_bonus = (
+                0.1
+                if current_player == player
+                and is_blocking_move(board, i, j, next_player)
+                else 0
+            )
+
+            board.bit_board.move(i, j, current_player)
             score = minimax_algo(
                 board,
                 player,
@@ -59,7 +70,8 @@ def minimax_algo(
                 alpha,
                 beta,
             )
-            board.clear_move(i, j)
+            score += blocking_bonus
+            board.bit_board.clear_move(i, j)
 
             if depth > 0:
                 if current_player == player:
@@ -79,3 +91,22 @@ def minimax_algo(
             break
 
     return move if depth == 0 else best_score
+
+
+def is_blocking_move(board: "Board", row: int, col: int, opponent: Players) -> bool:
+    """
+    Return whether the move blocks the opponent's winning move.
+
+    Args:
+        board (Board): The game board object.
+        row (int): The row of the move.
+        col (int): The column of the move.
+        opponent (Players): The opponent player.
+
+    Returns:
+        bool: Whether the move blocks the opponent's winning move.
+    """
+    board.bit_board.move(row, col, opponent)
+    winner = board.bit_board.check_win()
+    board.bit_board.clear_move(row, col)
+    return winner and winner != States.DRAW

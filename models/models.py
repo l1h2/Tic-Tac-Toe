@@ -1,10 +1,10 @@
 import enum
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING, Optional, Protocol
 
 import numpy as np
 import torch
 
-from utils import GameBoard, Players, States
+from utils import Players, States
 
 from .minimax import minimax_algo
 from .neural_net import TicTacToeNet
@@ -13,18 +13,18 @@ if TYPE_CHECKING:
     from game import Board
 
 
-def random(board: GameBoard, _) -> tuple[int, int]:
+def random(board: "Board", _=None) -> tuple[int, int]:
     """
     Returns a random empty position on the board.
 
     Args:
-        board (GameBoard): The current 2D game board.
+        board (Board): The game board object.
         _ (Any): Ignored argument.
 
     Returns:
         tuple[int, int]: The coordinates of a random empty position on the board.
     """
-    empty_positions = np.argwhere(np.equal(board, None))
+    empty_positions = np.argwhere(np.equal(board.board_2d, None))
     return tuple(empty_positions[np.random.choice(empty_positions.shape[0])])
 
 
@@ -40,7 +40,7 @@ def minimax(board: "Board", player: Players) -> tuple[int, int]:
         tuple[int, int]: The coordinates of the best move.
     """
     opponent = Players.X if player == Players.O else Players.O
-    scores = {player: 10, opponent: -10, States.DRAW: 0}
+    scores = {player: 20, opponent: -20, States.DRAW: 0}
     return minimax_algo(
         board,
         player,
@@ -65,7 +65,7 @@ def medium(board: "Board", player: Players) -> tuple[int, int]:
         tuple[int, int]: The coordinates of the selected move.
     """
     if np.random.rand() < 0.5:
-        return random(board.board_2d, player)
+        return random(board, player)
     else:
         return minimax(board, player)
 
@@ -82,18 +82,18 @@ def hard(board: "Board", player: Players) -> tuple[int, int]:
         tuple[int, int]: The coordinates of the selected move.
     """
     if np.random.rand() < 0.2:
-        return random(board.board_2d, player)
+        return random(board, player)
     else:
         return minimax(board, player)
 
 
-def neural_net(board: "Board", _: Players) -> tuple[int, int]:
+def mlp(board: "Board", hint: bool = False) -> tuple[int, int] | list[float]:
     """
     Returns the best move for the current player using a neural network.
 
     Args:
         board (Board): The game board object.
-        _ (Any): Ignored argument.
+        hint (bool): Whether to return the move or the probabilities.
 
     Returns:
         tuple[int, int]: The coordinates of the best move.
@@ -103,8 +103,12 @@ def neural_net(board: "Board", _: Players) -> tuple[int, int]:
     net.load_state_dict(torch.load(file))
     net.eval()
     state = torch.tensor([board.flat_board], dtype=torch.float32)
+
+    if hint:
+        return net.get_move_probabilities(state)
+
     move = net.select_move(state)
-    return move if board.check_square(*move) is None else random(board.board_2d, _)
+    return move if board.check_square(*move) is None else random(board)
 
 
 class Models(enum.Enum):
@@ -112,13 +116,27 @@ class Models(enum.Enum):
     MEDIUM = 1
     HARD = 2
     IMPOSSIBLE = 3
-    NEURAL_NET = 4
 
 
-MODELS: dict[Models, Callable[["Board", Players], tuple[int, int]]] = {
+class NeuralNetworks(enum.Enum):
+    MLP = 0
+
+
+class ModelProtocol(Protocol):
+    def __call__(self, board: "Board", players: Players) -> tuple[int, int]: ...
+
+
+class NeuralNetworkProtocol(Protocol):
+    def __call__(
+        self, board: "Board", hint: Optional[bool]
+    ) -> tuple[int, int] | list[float]: ...
+
+
+MODELS: dict[Models, ModelProtocol] = {
     Models.EASY: random,
     Models.MEDIUM: medium,
     Models.HARD: hard,
     Models.IMPOSSIBLE: minimax,
-    Models.NEURAL_NET: neural_net,
 }
+
+NEURAL_NETWORKS: dict[NeuralNetworks, NeuralNetworkProtocol] = {NeuralNetworks.MLP: mlp}

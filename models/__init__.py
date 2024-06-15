@@ -1,1 +1,1 @@
-from .models import MODELS, Models
+from .models import MODELS, NEURAL_NETWORKS, Models, NeuralNetworks

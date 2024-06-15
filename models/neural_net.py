@@ -54,3 +54,16 @@ class TicTacToeNet(nn.Module):
         x = self(x)
         flat_move = torch.argmax(x).item()
         return flat_move // 3, flat_move % 3
+
+    def get_move_probabilities(self, x: torch.Tensor) -> list[float]:
+        """
+        Gets the probabilities of each move.
+
+        Args:
+            x (torch.Tensor): The input tensor.
+
+        Returns:
+            list: The probabilities of each move.
+        """
+        x = self(x)
+        return x[0].tolist()
