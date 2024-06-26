@@ -98,10 +98,7 @@ def mlp(board: "Board", hint: bool = False) -> tuple[int, int] | list[float]:
     Returns:
         tuple[int, int]: The coordinates of the best move.
     """
-    file = "data/models/mlp_model.pth"
-    net = TicTacToeNet()
-    net.load_state_dict(torch.load(file))
-    net.eval()
+    net = TicTacToeNet("data/models/mlp_model.pth")
     state = torch.tensor([board.flat_board], dtype=torch.float32)
 
     if hint:
