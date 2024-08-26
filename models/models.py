@@ -109,6 +109,16 @@ def mlp(board: "Board", hint: bool = False) -> tuple[int, int] | list[float]:
 
 
 class Models(enum.Enum):
+    """
+    Enum class for the different models.
+
+    Attributes:
+        EASY (int): Random model.
+        MEDIUM (int): Random with 50% or minimax model.
+        HARD (int): Random with 20% chance or minimax model.
+        IMPOSSIBLE (int): Minimax model.
+    """
+
     EASY = 0
     MEDIUM = 1
     HARD = 2
