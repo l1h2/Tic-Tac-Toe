@@ -1,12 +1,13 @@
 import enum
-from typing import TYPE_CHECKING, Optional, Protocol
+from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 import numpy as np
 import torch
 
-from utils import Players, States
+from utils import Players
 
-from .minimax import minimax_algo
+from .minimax import minimax
 from .neural_net import TicTacToeNet
 
 if TYPE_CHECKING:
@@ -24,33 +25,8 @@ def random(board: "Board", _=None) -> tuple[int, int]:
     Returns:
         tuple[int, int]: The coordinates of a random empty position on the board.
     """
-    empty_positions = np.argwhere(np.equal(board.board_2d, None))
+    empty_positions = np.argwhere(np.equal(board.board_2d, None))  # type: ignore
     return tuple(empty_positions[np.random.choice(empty_positions.shape[0])])
-
-
-def minimax(board: "Board", player: Players) -> tuple[int, int]:
-    """
-    Returns the best move for the current player using the minimax algorithm.
-
-    Args:
-        board (Board): The game board object.
-        player (Players): The current player.
-
-    Returns:
-        tuple[int, int]: The coordinates of the best move.
-    """
-    opponent = Players.X if player == Players.O else Players.O
-    scores = {player: 20, opponent: -20, States.DRAW: 0}
-    return minimax_algo(
-        board,
-        player,
-        opponent,
-        player,
-        0,
-        scores,
-        -np.inf,
-        np.inf,
-    )
 
 
 def medium(board: "Board", player: Players) -> tuple[int, int]:
@@ -65,7 +41,7 @@ def medium(board: "Board", player: Players) -> tuple[int, int]:
         tuple[int, int]: The coordinates of the selected move.
     """
     if np.random.rand() < 0.5:
-        return random(board, player)
+        return random(board)
     else:
         return minimax(board, player)
 
@@ -82,7 +58,7 @@ def hard(board: "Board", player: Players) -> tuple[int, int]:
         tuple[int, int]: The coordinates of the selected move.
     """
     if np.random.rand() < 0.2:
-        return random(board, player)
+        return random(board)
     else:
         return minimax(board, player)
 
@@ -129,21 +105,13 @@ class NeuralNetworks(enum.Enum):
     MLP = 0
 
 
-class ModelProtocol(Protocol):
-    def __call__(self, board: "Board", players: Players) -> tuple[int, int]: ...
-
-
-class NeuralNetworkProtocol(Protocol):
-    def __call__(
-        self, board: "Board", hint: Optional[bool]
-    ) -> tuple[int, int] | list[float]: ...
-
-
-MODELS: dict[Models, ModelProtocol] = {
+MODELS: dict[Models, Callable[["Board", Players], tuple[int, int]]] = {
     Models.EASY: random,
     Models.MEDIUM: medium,
     Models.HARD: hard,
     Models.IMPOSSIBLE: minimax,
 }
 
-NEURAL_NETWORKS: dict[NeuralNetworks, NeuralNetworkProtocol] = {NeuralNetworks.MLP: mlp}
+NEURAL_NETWORKS: dict[
+    NeuralNetworks, Callable[["Board", bool], tuple[int, int] | list[float]]
+] = {NeuralNetworks.MLP: mlp}

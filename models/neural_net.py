@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+from torch.optim.adam import Adam
 from torch.utils.data import DataLoader
 
 
@@ -26,7 +27,7 @@ class TicTacToeNet(nn.Module):
     - `test_model(test_loader: DataLoader[torch.Tuple[torch.Tensor]], model_file: str = None) -> list[int]`: Tests the model on a game states dataset.
     """
 
-    def __init__(self, state_file: str = None):
+    def __init__(self, state_file: str | None = None):
         super().__init__()
         self.relu = nn.ReLU()
         self.softmax = nn.Softmax(dim=1)
@@ -67,7 +68,7 @@ class TicTacToeNet(nn.Module):
         self.eval()
         x = self(x)
         flat_move = torch.argmax(x).item()
-        return flat_move // 3, flat_move % 3
+        return int(flat_move // 3), int(flat_move % 3)
 
     def get_move_probabilities(self, x: torch.Tensor) -> list[float]:
         """
@@ -81,11 +82,11 @@ class TicTacToeNet(nn.Module):
         """
         self.eval()
         x = self(x)
-        return x[0].tolist()
+        return x[0].tolist()  # type: ignore
 
     def train_model(
         self,
-        train_loader: DataLoader[torch.Tuple[torch.Tensor]],
+        train_loader: DataLoader[tuple[torch.Tensor, ...]],
         num_epochs: int = 1000,
     ) -> dict[str, torch.Tensor]:
         """
@@ -100,17 +101,21 @@ class TicTacToeNet(nn.Module):
         """
         self.state_loaded = False
         loss_fn = nn.CrossEntropyLoss()
-        optimizer = torch.optim.Adam(self.parameters(), lr=0.01)
+        optimizer = Adam(self.parameters(), lr=0.01)
 
         best_loss = float("inf")
         patience = 10
         patience_counter = 0
         min_delta = 1e-6
+        avg_loss = 0
+        last_epoch = 0
 
         for epoch in range(num_epochs):
+            last_epoch = epoch
             self.train()
             batch_loss = 0
             batch_count = 0
+
             for states_batch, targets_batch in train_loader:
                 optimizer.zero_grad()
                 outputs = self(states_batch)
@@ -137,13 +142,13 @@ class TicTacToeNet(nn.Module):
                 break
 
         self.state_loaded = True
-        print(f"Training complete: Epochs: {epoch+1}, Loss: {avg_loss}")
+        print(f"Training complete: Epochs: {last_epoch+1}, Loss: {avg_loss}")
         return self.state_dict()
 
     def test_model(
         self,
-        test_loader: DataLoader[torch.Tuple[torch.Tensor]],
-        model_file: str = None,
+        test_loader: DataLoader[tuple[torch.Tensor, ...]],
+        model_file: str | None = None,
     ) -> list[int]:
         """
         Tests the model on a game states dataset.
@@ -155,14 +160,14 @@ class TicTacToeNet(nn.Module):
         Returns:
             list[int]: The predictions of the model.
         """
-        if not self.state_loaded:
+        if not self.state_loaded and model_file:
             self.load_state_dict(torch.load(model_file))
             self.state_loaded = True
 
         self.eval()
         correct = 0
         total = 0
-        predictions = []
+        predictions: list[int] = []
 
         with torch.no_grad():
             for states, targets in test_loader:
@@ -170,7 +175,7 @@ class TicTacToeNet(nn.Module):
                 _, predicted = torch.max(outputs, 1)
                 total += targets.size(0)
                 correct += (predicted == targets).sum().item()
-                predictions.extend(predicted.tolist())
+                predictions.extend(predicted.tolist())  # type: ignore
 
         print(f"Accuracy: {100 * correct / total:.2f}%")
         return predictions
